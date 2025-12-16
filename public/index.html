@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RPG Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='%233b82f6'/><circle cx='22' cy='22' r='3.6' fill='white'/><circle cx='42' cy='22' r='3.6' fill='white'/><circle cx='22' cy='42' r='3.6' fill='white'/><circle cx='42' cy='42' r='3.6' fill='white'/><circle cx='32' cy='32' r='3.6' fill='white'/></svg>">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans antialiased">
+<div id="app" class="h-screen flex flex-col">
+    
+    <!-- Tela Inicial -->
+    <div v-if="!joined" class="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 page-scroll">
+        <div class="w-full max-w-md py-6">
+            <div class="text-center mb-8">
+                <i class="fas fa-dice-d20 text-6xl text-purple-400 mb-4"></i>
+                <h1 class="text-4xl font-bold text-white mb-2">RPG Nexus</h1>
+                <p class="text-gray-400">Gerencie suas mesas de RPG</p>
+            </div>
+            
+            <div class="bg-gray-800 rounded-xl shadow-2xl p-6 space-y-6">
+                <!-- Criar Mesa -->
+                <div class="border-b border-gray-700 pb-6">
+                    <h2 class="text-xl font-bold mb-4 text-purple-300">
+                        <i class="fas fa-plus-circle mr-2"></i>Criar Nova Mesa
+                    </h2>
+                    <input 
+                        v-model="newTableName" 
+                        placeholder="Nome da Mesa (opcional)" 
+                        class="w-full mb-3 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                    <button 
+                        @click="createTable" 
+                        class="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-semibold p-3 rounded-lg transition-all shadow-lg"
+                    >
+                        <i class="fas fa-magic mr-2"></i>Gerar Mesa
+                    </button>
+                    <div v-if="newTableInfo" class="mt-4 p-4 bg-gray-900 rounded-lg border border-purple-500">
+                        <p class="text-sm mb-2">
+                            <span class="text-gray-400">ID da Mesa:</span>
+                            <strong class="text-green-400 ml-2 text-lg">{{ newTableInfo.tableId }}</strong>
+                        </p>
+                        <p class="text-sm mb-2">
+                            <span class="text-gray-400">Token GM:</span>
+                            <strong class="text-red-400 ml-2 break-all">{{ newTableInfo.gmCode }}</strong>
+                        </p>
+                        <p class="text-xs text-yellow-400 mt-3">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>Guarde o Token GM com segurança!
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Entrar em Mesa -->
+                <div>
+                    <h2 class="text-xl font-bold mb-4 text-green-300">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Entrar em Mesa
+                    </h2>
+                    <input 
+                        v-model="login.tableId" 
+                        placeholder="ID da Mesa" 
+                        class="w-full mb-3 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                    <div v-if="recentTables.length > 0" class="mb-3">
+                        <div class="text-xs text-gray-400 mb-2">Mesas recentes:</div>
+                        <div class="flex flex-wrap gap-2">
+                            <button 
+                                v-for="t in recentTables" 
+                                :key="t.tableId" 
+                                @click="applySuggestion(t)" 
+                                class="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-gray-200 transition-colors"
+                            >
+                                {{ t.name || t.tableId }}
+                            </button>
+                        </div>
+                    </div>
+                    <input 
+                        v-model="login.name" 
+                        placeholder="Seu Nome" 
+                        class="w-full mb-3 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                    <input 
+                        v-model="login.gmCode" 
+                        placeholder="Código GM (se for mestre)" 
+                        class="w-full mb-4 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                    <button 
+                        @click="joinTable" 
+                        class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold p-3 rounded-lg transition-all shadow-lg"
+                    >
+                        <i class="fas fa-door-open mr-2"></i>Entrar
+                    </button>
+                </div>
+            </div>
+                </div>
+            </div>
+
+    <!-- Interface Principal -->
+    <div v-if="joined" class="flex-1 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <header class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+            <div class="flex items-center gap-3">
+                <button v-if="isMobile" @click="mobileMenuOpen = !mobileMenuOpen" class="text-gray-300">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+            <div>
+                    <div class="font-bold text-white">{{ tableName || login.tableId }}</div>
+                    <div class="text-xs" :class="isGm ? 'text-red-400' : 'text-blue-400'">
+                        <i :class="isGm ? 'fas fa-crown' : 'fas fa-user'" class="mr-1"></i>
+                        {{ isGm ? 'Mestre' : login.name }}
+                        </div>
+                    </div>
+            </div>
+            <button @click="showSettings = !showSettings" class="text-gray-300">
+                <i class="fas fa-cog text-xl"></i>
+            </button>
+        </header>
+
+        <!-- Debug overlay (visible to GM or dev) -->
+        <div v-if="debugVisible" class="fixed right-4 bottom-20 z-50 w-80 bg-black bg-opacity-80 text-xs text-gray-200 p-3 rounded-lg border border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <strong>Status</strong>
+                <button @click="debugVisible = false" class="text-gray-400 hover:text-white">Fechar</button>
+            </div>
+            <div class="space-y-1">
+                <div><strong>joined:</strong> {{ joined }}</div>
+                <div><strong>isGm:</strong> {{ isGm }}</div>
+                <div><strong>tableId:</strong> {{ login.tableId }}</div>
+                <div><strong>playerId:</strong> {{ login.playerId }}</div>
+                <div><strong>tableName:</strong> {{ tableName }}</div>
+                <div><strong>players count:</strong> {{ playersList.length }}</div>
+                <div v-if="lastClientError" class="mt-2 text-red-400"><strong>Last Error:</strong> {{ lastClientError }}</div>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Tabs -->
+        <div class="bottom-nav md:hidden">
+            <div class="flex justify-around items-center h-16">
+                <button 
+                    @click="mobileTab = 'feed'" 
+                    class="flex flex-col items-center justify-center flex-1 h-full"
+                    :class="mobileTab === 'feed' ? 'text-purple-400' : 'text-gray-400'"
+                >
+                    <i class="fas fa-comments text-xl mb-1"></i>
+                    <span class="text-xs">Quadro</span>
+                </button>
+                <button 
+                    @click="mobileTab = 'sheet'" 
+                    class="flex flex-col items-center justify-center flex-1 h-full"
+                    :class="mobileTab === 'sheet' ? 'text-purple-400' : 'text-gray-400'"
+                >
+                    <i class="fas fa-scroll text-xl mb-1"></i>
+                    <span class="text-xs">{{ isGm ? 'Config' : 'Ficha' }}</span>
+                </button>
+                <button 
+                    v-if="!isGm" 
+                    @click="mobileTab = 'inventory'" 
+                    class="flex flex-col items-center justify-center flex-1 h-full"
+                    :class="mobileTab === 'inventory' ? 'text-purple-400' : 'text-gray-400'"
+                >
+                    <i class="fas fa-backpack text-xl mb-1"></i>
+                    <span class="text-xs">Inventário</span>
+                </button>
+                <button 
+                    v-if="isGm" 
+                    @click="mobileTab = 'tools'" 
+                    class="flex flex-col items-center justify-center flex-1 h-full"
+                    :class="mobileTab === 'tools' ? 'text-purple-400' : 'text-gray-400'"
+                >
+                    <i class="fas fa-tools text-xl mb-1"></i>
+                    <span class="text-xs">Ferramentas</span>
+                </button>
+        </div>
+    </div>
+
+        <!-- Content Area -->
+        <div class="flex-1 flex content-area min-h-0">
+            <!-- Sidebar - Desktop (scrollable) -->
+            <aside class="hidden md:flex md:w-80 min-w-0 bg-gray-800 border-r border-gray-700 flex-col overflow-y-auto max-h-screen">
+                <div class="p-4 border-b border-gray-700">
+                    <div v-if="isGm" class="flex items-center justify-between">
+                        <h2 class="text-xl font-bold text-purple-400">
+                            <i class="fas fa-cog mr-2"></i>Configuração
+                        </h2>
+                </div>
+                    <div v-else class="flex items-center gap-2">
+                        <button 
+                            @click="desktopSidebarTab = 'sheet'"
+                            class="flex-1 py-2 px-3 rounded-lg transition-colors"
+                            :class="desktopSidebarTab === 'sheet' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+                        >
+                            <i class="fas fa-scroll mr-2"></i>Ficha
+                        </button>
+                        <button 
+                            @click="desktopSidebarTab = 'inventory'"
+                            class="flex-1 py-2 px-3 rounded-lg transition-colors"
+                            :class="desktopSidebarTab === 'inventory' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+                        >
+                            <i class="fas fa-backpack mr-2"></i>Inventário
+                        </button>
+                </div>
+            </div>
+                <div class="flex-1 overflow-y-auto p-3 sm:p-4">
+                    <component v-if="isGm" is="gm-config"></component>
+                    <component v-else :is="desktopSidebarTab === 'sheet' ? 'player-sheet' : 'player-inventory'"></component>
+                </div>
+            </aside>
+
+            <!-- Main Feed Area + Chat -->
+            <main class="flex-1 min-w-0 flex flex-col bg-gray-900 overflow-hidden">
+                <!-- Chat / Feed -->
+                <section 
+                    class="chat-layout"
+                    v-show="!isMobile || mobileTab === 'feed'"
+                >
+                    <!-- Feed Tabs -->
+                    <div class="chat-header px-4">
+                        <div class="flex gap-4">
+                            <button 
+                                @click="feedTab = 'all'" 
+                                class="py-3 px-4 font-semibold transition-colors"
+                                :class="feedTab === 'all' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-gray-400 hover:text-gray-300'"
+                            >
+                                <i class="fas fa-comments mr-2"></i>Quadro Livre
+                            </button>
+                            <button 
+                                @click="feedTab = 'gm'" 
+                                class="py-3 px-4 font-semibold transition-colors"
+                                :class="feedTab === 'gm' ? 'text-red-400 border-b-2 border-red-400' : 'text-gray-400 hover:text-gray-300'"
+                            >
+                                <i class="fas fa-crown mr-2"></i>Quadro do Mestre
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Feed Container -->
+                    <div 
+                        id="feed-container" 
+                        class="chat-feed space-y-4 scroll-smooth"
+                    >
+                        <div 
+                            v-for="item in filteredFeed" 
+                            :key="item.id" 
+                            class="feed-item"
+                        >
+                            <div 
+                                class="max-w-3xl mx-auto rounded-lg p-4 shadow-lg"
+                                :class="[
+                                    item.is_gm ? 'bg-gray-800 border-l-4 border-red-500' : 'bg-blue-900 border-l-4 border-blue-500',
+                                    item.type === 'monster' || item.type === 'item' || item.type === 'condition' || item.type === 'scenario' ? 'bg-gray-800 border-2 border-purple-500' : ''
+                                ]"
+                            >
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-sm" :class="item.is_gm ? 'text-red-400' : 'text-blue-300'">
+                                            <i v-if="item.is_gm" class="fas fa-crown mr-1"></i>
+                                            {{ item.sender }}
+                                        </span>
+                                        <span v-if="item.type === 'monster'" class="text-xs bg-red-900 px-2 py-1 rounded">Monstro</span>
+                                        <span v-if="item.type === 'item'" class="text-xs bg-yellow-900 px-2 py-1 rounded">Item</span>
+                                        <span v-if="item.type === 'condition'" class="text-xs bg-orange-900 px-2 py-1 rounded">Condição</span>
+                                        <span v-if="item.type === 'scenario'" class="text-xs bg-green-900 px-2 py-1 rounded">Cenário</span>
+                                    </div>
+                                    <span class="text-xs text-gray-400">
+                                        {{ formatTime(item.timestamp) }}
+                                    </span>
+                                </div>
+
+                                <!-- Chat Message -->
+                                <p v-if="item.type === 'chat'" class="whitespace-pre-wrap text-gray-100">{{ item.content.text }}</p>
+
+                                <!-- Image -->
+                                <div v-if="item.type === 'image'">
+                                    <img :src="item.content.url" class="max-w-full rounded-lg mb-2 shadow-md" @error="handleImageError">
+                                    <p v-if="item.content.caption" class="text-sm italic text-gray-300">{{ item.content.caption }}</p>
+                                </div>
+
+                                <!-- Monster Card -->
+                                <div v-if="item.type === 'monster'" class="space-y-3">
+                                    <div class="flex gap-4 items-start">
+                                        <img 
+                                            v-if="item.content.image" 
+                                            :src="item.content.image" 
+                                            class="w-32 h-32 object-cover rounded-lg shadow-md"
+                                            @error="handleImageError"
+                                        >
+                                        <div class="flex-1">
+                                            <h3 class="text-xl font-bold text-red-400 mb-1">{{ item.content.name }}</h3>
+                                            <p class="text-sm text-gray-300 mb-3">{{ item.content.desc }}</p>
+                                            <div class="flex flex-wrap gap-2">
+                                                <span v-if="item.content.hp" class="bg-red-900 px-3 py-1 rounded text-sm">HP: {{ item.content.hp }}</span>
+                                                <span v-if="item.content.ac" class="bg-gray-700 px-3 py-1 rounded text-sm">AC: {{ item.content.ac }}</span>
+                                                <span v-if="item.content.level" class="bg-purple-900 px-3 py-1 rounded text-sm">Nível: {{ item.content.level }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Item Card -->
+                                <div v-if="item.type === 'item'" class="space-y-2">
+                                    <h3 class="text-xl font-bold text-yellow-400">{{ item.content.name }}</h3>
+                                    <p class="text-gray-300">{{ item.content.desc }}</p>
+                                    <div v-if="item.content.image" class="mt-2">
+                                        <img :src="item.content.image" class="max-w-xs rounded-lg" @error="handleImageError">
+                                    </div>
+                                       <div class="mt-3">
+                                           <button v-if="!isGm" @click="copyItemToInventory(item.content)" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm">
+                                               <i class="fas fa-copy mr-2"></i>Copiar para Inventário
+                                           </button>
+                                       </div>
+                                </div>
+
+                                <!-- Condition Card -->
+                                <div v-if="item.type === 'condition'" class="space-y-2">
+                                    <h3 class="text-xl font-bold text-orange-400">{{ item.content.name }}</h3>
+                                    <p class="text-gray-300">{{ item.content.desc }}</p>
+                                </div>
+
+                                <!-- Scenario Card -->
+                                <div v-if="item.type === 'scenario'" class="space-y-2">
+                                    <h3 class="text-xl font-bold text-green-400">{{ item.content.name }}</h3>
+                                    <p class="text-gray-300 mb-2">{{ item.content.desc }}</p>
+                                    <div v-if="item.content.image" class="mt-2">
+                                        <img :src="item.content.image" class="max-w-full rounded-lg" @error="handleImageError">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="filteredFeed.length === 0" class="text-center text-gray-500 py-8">
+                            <i class="fas fa-inbox text-4xl mb-2"></i>
+                            <p>Nenhuma mensagem ainda</p>
+                        </div>
+                    </div>
+
+                    <!-- Input Area (sticky within chat) -->
+                    <div class="chat-input">
+                        <div v-if="feedTab === 'gm' && !isGm" class="max-w-3xl mx-auto mb-2 p-3 bg-yellow-900 border border-yellow-700 rounded-lg text-yellow-200 text-sm">
+                            <i class="fas fa-info-circle mr-2"></i>Apenas o mestre pode enviar mensagens no Quadro do Mestre
+                        </div>
+                        <div class="flex gap-2 max-w-3xl mx-auto">
+                            <input 
+                                v-model="messageInput" 
+                                @keyup.enter="sendMessage" 
+                                :placeholder="feedTab === 'gm' && !isGm ? 'Apenas o mestre pode enviar aqui' : 'Digite sua mensagem...'" 
+                                :disabled="feedTab === 'gm' && !isGm"
+                                class="flex-1 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                            <button 
+                                @click="toggleImageModal" 
+                                :disabled="feedTab === 'gm' && !isGm"
+                                class="bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <i class="fas fa-image"></i>
+                            </button>
+                            <button 
+                                @click="sendMessage" 
+                                :disabled="feedTab === 'gm' && !isGm"
+                                class="bg-purple-600 hover:bg-purple-700 px-4 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Mobile Views (outras abas) -->
+                <div v-show="isMobile && mobileTab === 'sheet'" class="flex-1 overflow-y-auto p-4">
+                    <component :is="isGm ? 'gm-config' : 'player-sheet'"></component>
+                </div>
+
+                <div v-show="isMobile && mobileTab === 'inventory' && !isGm" class="flex-1 overflow-y-auto p-4">
+                    <component is="player-inventory"></component>
+                </div>
+
+                <div v-show="isMobile && mobileTab === 'tools' && isGm" class="flex-1 overflow-y-auto p-4">
+                    <component is="gm-tools"></component>
+                </div>
+            </main>
+
+            <!-- GM Tools Sidebar - Desktop -->
+            <aside v-if="isGm" class="hidden lg:flex lg:w-80 min-w-0 bg-gray-800 border-l border-gray-700 flex-col overflow-hidden">
+                <div class="p-4 border-b border-gray-700">
+                    <h2 class="text-xl font-bold text-red-400">
+                        <i class="fas fa-tools mr-2"></i>Ferramentas do Mestre
+            </h2>
+                </div>
+                <div class="flex-1 overflow-visible p-3 sm:p-4">
+                    <component is="gm-tools"></component>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Image Modal -->
+    <div v-if="showImageModal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" @click.self="showImageModal = false">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md slide-in">
+            <h3 class="font-bold text-xl mb-4 text-white">
+                <i class="fas fa-image mr-2"></i>Enviar Imagem
+            </h3>
+            <input 
+                v-model="imageInputUrl" 
+                placeholder="URL da Imagem" 
+                class="w-full mb-4 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+            <input 
+                v-model="imageInputCaption" 
+                placeholder="Legenda (opcional)" 
+                class="w-full mb-4 p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+            <div class="flex gap-2">
+                <button 
+                    @click="showImageModal = false" 
+                    class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button 
+                    @click="sendImage" 
+                    class="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+                >
+                    Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Creation Modal -->
+    <div v-if="showContentModal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" @click.self="showContentModal = false">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md slide-in max-h-[90vh] overflow-y-auto">
+            <h3 class="font-bold text-xl mb-4 text-white">
+                <i :class="contentModalIcon" class="mr-2"></i>{{ contentModalTitle }}
+            </h3>
+            <component :is="contentModalComponent"></component>
+            <div class="flex gap-2 mt-4">
+                <button 
+                    @click="showContentModal = false" 
+                    class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button 
+                    @click="sendContent" 
+                    class="flex-1 px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+                >
+                    Publicar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div v-if="showSettings" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" @click.self="showSettings = false">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md slide-in">
+            <h3 class="font-bold text-xl mb-4 text-white">
+                <i class="fas fa-cog mr-2"></i>Configurações
+            </h3>
+            <div class="space-y-4">
+                <div>
+                    <p class="text-sm text-gray-400 mb-2">ID da Mesa:</p>
+                    <p class="font-mono text-lg text-white bg-gray-700 p-2 rounded">{{ login.tableId }}</p>
+                </div>
+                <button 
+                    @click="leaveTable" 
+                    class="w-full px-4 py-3 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-white"
+                >
+                    <i class="fas fa-sign-out-alt mr-2"></i>Sair da Mesa
+                </button>
+            </div>
+            <button 
+                @click="showSettings = false" 
+                class="w-full mt-4 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+                Fechar
+            </button>
+        </div>
+    </div>
+
+    <!-- Player View Modal (GM) -->
+    <div v-if="isGm && viewedPlayer" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" @click.self="viewedPlayer = null">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-4xl slide-in max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-xl text-white">
+                    <i class="fas fa-user mr-2"></i>{{ viewedPlayerData?.player?.name || 'Carregando...' }}
+                </h3>
+                <button @click="viewedPlayer = null" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div v-if="loadingPlayerData" class="text-center py-8">
+                <i class="fas fa-spinner fa-spin text-3xl text-gray-400 mb-2"></i>
+                <p class="text-gray-400">Carregando dados do jogador...</p>
+            </div>
+            
+            <div v-else-if="viewedPlayerData" class="space-y-6">
+                <!-- Ficha do Jogador -->
+                <div class="bg-gray-900 rounded-lg p-4">
+                    <h4 class="font-bold text-lg mb-3 text-purple-400">
+                        <i class="fas fa-scroll mr-2"></i>Ficha do Personagem
+                    </h4>
+                    <div v-if="viewedPlayerData.player.data.Avatar" class="mb-4">
+                        <img :src="viewedPlayerData.player.data.Avatar" class="w-24 h-24 rounded-lg object-cover avatar-small" @error="handleImageError">
+                    </div>
+                    <div class="space-y-3">
+                        <div v-for="(value, key) in viewedPlayerData.player.data" :key="key" v-if="key !== 'Avatar'">
+                            <div class="text-sm font-semibold text-gray-400 mb-1">{{ key }}</div>
+                            <div class="text-white">{{ value }}</div>
+                        </div>
+                        <div v-if="Object.keys(viewedPlayerData.player.data).filter(k => k !== 'Avatar').length === 0" class="text-gray-500 italic">
+                            Nenhum dado preenchido na ficha
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Inventário -->
+                <div class="bg-gray-900 rounded-lg p-4">
+                    <h4 class="font-bold text-lg mb-3 text-yellow-400">
+                        <i class="fas fa-backpack mr-2"></i>Inventário ({{ viewedPlayerData.inventory?.length || 0 }} itens)
+                    </h4>
+                    <div v-if="viewedPlayerData.inventory && viewedPlayerData.inventory.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div v-for="(invItem, idx) in viewedPlayerData.inventory" :key="idx" class="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                            <h5 class="font-bold text-yellow-300 mb-1">{{ invItem.name || 'Item sem nome' }}</h5>
+                            <p class="text-sm text-gray-300 mb-2">{{ invItem.desc || 'Sem descrição' }}</p>
+                            <div v-if="invItem.image" class="mb-2">
+                                <img :src="invItem.image" class="max-w-full rounded" @error="handleImageError">
+                            </div>
+                            <div v-if="invItem.attributes" class="text-xs text-gray-400">
+                                <div v-for="(val, attr) in invItem.attributes" :key="attr" class="mb-1">
+                                    <strong>{{ attr }}:</strong> {{ val }}
+                                </div>
+                            </div>
+                            <div v-if="invItem.notes" class="text-xs text-gray-400 mt-2 italic">
+                                {{ invItem.notes }}
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-gray-500 italic text-center py-4">
+                        <i class="fas fa-box-open text-2xl mb-2"></i>
+                        <p>Inventário vazio</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Players List Modal (GM) -->
+    <div v-if="isGm && showPlayersList && !viewedPlayer" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" @click.self="showPlayersList = false">
+        <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md slide-in max-h-[80vh] overflow-y-auto">
+            <h3 class="font-bold text-xl mb-4 text-white">
+                <i class="fas fa-users mr-2"></i>Jogadores Conectados
+            </h3>
+            <div class="space-y-3">
+                <button 
+                    v-for="p in playersList" 
+                    :key="p.id" 
+                    @click="viewPlayer(p.id)"
+                    class="w-full flex items-center gap-3 p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-left"
+                >
+                    <div class="w-12 h-12 rounded-full overflow-hidden bg-gray-600 flex items-center justify-center flex-shrink-0">
+                        <img v-if="p.data && p.data.Avatar" :src="p.data.Avatar" class="w-full h-full object-cover avatar-small" @error="handleImageError">
+                        <i v-else class="fas fa-user text-gray-400"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-white truncate">{{ p.name }}</div>
+                        <div class="text-xs text-gray-400 truncate">{{ p.id }}</div>
+                    </div>
+                    <i class="fas fa-chevron-right text-gray-400"></i>
+                </button>
+                <div v-if="playersList.length === 0" class="text-center text-gray-500 py-4">
+                    <i class="fas fa-user-slash text-3xl mb-2"></i>
+                    <p>Nenhum jogador conectado</p>
+                </div>
+            </div>
+            <button 
+                @click="showPlayersList = false" 
+                class="w-full mt-4 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+                Fechar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted, nextTick, watch, provide, inject } = Vue;
+const socket = io();
+const SESSION_KEY = 'rpg-session';
+
+// Componentes definidos antes do app principal
+const GmConfig = {
+    template: `
+        <div class="space-y-4">
+                <div class="mb-4">
+                <h3 class="font-bold mb-3 text-sm text-gray-400">Estrutura da Ficha (3 Seções)</h3>
+                <div class="space-y-4">
+                    <div v-for="sec in sections" :key="sec.id" class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                        <div class="flex justify-between items-center mb-3">
+                                <div>
+                                    <div class="text-sm font-semibold text-gray-200">{{ sec.title }}</div>
+                                <div class="text-xs text-gray-400">{{ sec.fields.length }} campos</div>
+                                </div>
+                            <button @click="addField(sec.id)" class="text-xs bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded transition-colors">
+                                <i class="fas fa-plus mr-1"></i>Campo
+                            </button>
+                            </div>
+                        <div v-if="sec.fields.length === 0" class="text-xs text-gray-500 italic mb-2">Nenhum campo</div>
+                        <div v-for="(field, idx) in sec.fields" :key="sec.id + '-' + idx" class="flex flex-col sm:flex-row gap-2 mb-2 items-stretch sm:items-center">
+                                <input v-model="field.name" class="flex-1 min-w-0 p-2 bg-gray-700 rounded text-sm text-white" placeholder="Nome">
+                                <select v-model="field.type" class="w-28 sm:w-32 flex-shrink-0 p-2 bg-gray-700 rounded text-sm text-white">
+                                    <option value="text">Texto</option>
+                                    <option value="number">Número</option>
+                                    <option value="longtext">Área</option>
+                                </select>
+                                <button @click="removeField(sec.id, idx)" class="ml-auto sm:ml-0 mt-1 sm:mt-0 inline-flex items-center justify-center p-2 bg-red-700 hover:bg-red-600 rounded text-white text-sm" aria-label="Remover campo">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <button @click="saveSchema" class="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded-lg text-white font-semibold transition-colors">
+                <i class="fas fa-save mr-2"></i>Salvar Estrutura
+            </button>
+            </div>
+    `,
+    setup() {
+        return {
+            sections: inject('sections'),
+            addField: inject('addField'),
+            removeField: inject('removeField'),
+            saveSchema: inject('saveSchema')
+        };
+    }
+};
+
+const PlayerSheet = {
+    template: `
+        <div class="space-y-4">
+                <div class="mb-4">
+                    <h3 class="font-bold text-sm text-gray-400 mb-2">Avatar</h3>
+                    <div class="flex items-center gap-3">
+                    <div class="w-20 h-20 bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
+                            <img v-if="sheetData['Avatar']" :src="sheetData['Avatar']" class="w-full h-full object-cover avatar-small">
+                            <i v-else class="fas fa-user text-3xl text-gray-500"></i>
+                        </div>
+                        <div class="flex-1">
+                        <input type="file" accept="image/*" @change="handleAvatarFile" class="text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700">
+                        <p class="text-xs text-gray-500 mt-1">Envie uma imagem</p>
+                        </div>
+                    </div>
+                </div>
+                <div v-for="sec in sections" :key="sec.id" class="mb-4">
+                    <h4 class="text-sm font-semibold text-gray-300 mb-2">{{ sec.title }}</h4>
+                <div v-if="sec.fields.length === 0" class="text-xs text-gray-500 italic mb-2">Sem campos</div>
+                <div v-for="(field, idx) in sec.fields" :key="sec.id+'-'+idx" class="mb-3">
+                        <label class="block text-sm text-gray-400 mb-1">{{ field.name }}</label>
+                    <input 
+                        v-if="field.type !== 'longtext'" 
+                        :type="field.type" 
+                        v-model="sheetData[field.name]" 
+                        @change="saveSheet" 
+                        class="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                    <textarea 
+                        v-else 
+                        v-model="sheetData[field.name]" 
+                        @change="saveSheet" 
+                        class="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 text-white h-24 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    ></textarea>
+                    </div>
+                </div>
+            <div v-if="sections.reduce((acc,s)=>acc + s.fields.length, 0) === 0" class="text-gray-500 italic text-center py-8">
+                <i class="fas fa-info-circle text-2xl mb-2"></i>
+                <p>O mestre ainda não definiu a ficha</p>
+            </div>
+        </div>
+    `,
+    setup() {
+        return {
+            sections: inject('sections'),
+            sheetData: inject('sheetData'),
+            handleAvatarFile: inject('handleAvatarFile'),
+            saveSheet: inject('saveSheet')
+        };
+    }
+};
+
+const PlayerInventory = {
+    template: `
+        <div class="space-y-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-lg text-yellow-400">
+                    <i class="fas fa-backpack mr-2"></i>Meu Inventário
+                </h3>
+                <button 
+                    @click="showCreateItemModal = true" 
+                    class="bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded-lg text-white text-sm font-semibold transition-colors"
+                >
+                    <i class="fas fa-plus mr-1"></i>Novo Item
+                </button>
+            </div>
+
+            <div v-if="inventory.length === 0" class="text-center py-8 text-gray-500">
+                <i class="fas fa-box-open text-4xl mb-3"></i>
+                <p>Seu inventário está vazio</p>
+                <p class="text-sm mt-2">Crie um item ou adicione itens do quadro do mestre</p>
+            </div>
+
+            <div v-else class="grid grid-cols-1 gap-3">
+                <div 
+                    v-for="(item, idx) in inventory" 
+                    :key="idx" 
+                    class="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-yellow-600 transition-colors"
+                >
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex-1">
+                            <h4 class="font-bold text-yellow-300 mb-1">{{ item.name || 'Item sem nome' }}</h4>
+                            <p class="text-sm text-gray-300 mb-2">{{ item.desc || 'Sem descrição' }}</p>
+                        </div>
+                        <button 
+                            @click="editItem(idx)" 
+                            class="ml-2 text-gray-400 hover:text-yellow-400 transition-colors"
+                        >
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button 
+                            @click="removeItem(idx)" 
+                            class="ml-2 text-gray-400 hover:text-red-400 transition-colors"
+                        >
+                            <i class="fas fa-trash"></i>
+                        </button>
+                                </div>
+                    <div v-if="item.image" class="mb-2">
+                        <img :src="item.image" class="max-w-full rounded-lg" @error="handleImageError">
+                            </div>
+                    <div v-if="item.attributes && Object.keys(item.attributes).length > 0" class="mb-2">
+                        <div class="text-xs text-gray-400 space-y-1">
+                            <div v-for="(val, attr) in item.attributes" :key="attr">
+                                <strong>{{ attr }}:</strong> {{ val }}
+                        </div>
+                        </div>
+                    </div>
+                    <div v-if="item.notes" class="text-xs text-gray-400 italic mt-2">
+                        <strong>Notas:</strong> {{ item.notes }}
+                    </div>
+                </div>
+            </div>
+            <!-- (Removed static sheetData.Inventory block — inventory shown above is the editable list) -->
+
+            <!-- Create/Edit Item Modal -->
+            <div v-if="showCreateItemModal || editingItemIndex !== null" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4" @click.self="closeItemModal">
+                <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md slide-in max-h-[90vh] overflow-y-auto">
+                    <h3 class="font-bold text-xl mb-4 text-white">
+                        <i class="fas fa-gem mr-2"></i>{{ editingItemIndex !== null ? 'Editar Item' : 'Criar Item' }}
+                    </h3>
+                    <div class="space-y-4">
+                        <input 
+                            v-model="currentItem.name" 
+                            placeholder="Nome do Item" 
+                            class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400"
+                        >
+                        <textarea 
+                            v-model="currentItem.desc" 
+                            placeholder="Descrição" 
+                            class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 h-24"
+                        ></textarea>
+                        <input 
+                            v-model="currentItem.image" 
+                            placeholder="URL da Imagem (opcional)" 
+                            class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400"
+                        >
+                            <div>
+                            <label class="block text-sm text-gray-400 mb-2">Atributos (opcional)</label>
+                            <div v-for="(val, attr) in currentItem.attributes" :key="attr" class="flex gap-2 mb-2">
+                                <input 
+                                    v-model="attrNames[attr]" 
+                                    placeholder="Nome do atributo" 
+                                    class="flex-1 p-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 text-sm"
+                                    @input="updateAttributeName(attr, $event.target.value)"
+                                >
+                                <input 
+                                    v-model="currentItem.attributes[attr]" 
+                                    placeholder="Valor" 
+                                    class="flex-1 p-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 text-sm"
+                                >
+                                <button @click="removeAttribute(attr)" class="text-red-400 hover:text-red-300">
+                                    <i class="fas fa-times"></i>
+                                </button>
+            </div>
+                            <button 
+                                @click="addAttribute" 
+                                class="text-sm text-gray-400 hover:text-gray-300 border border-dashed border-gray-600 px-3 py-2 rounded-lg w-full"
+                            >
+                                <i class="fas fa-plus mr-1"></i>Adicionar Atributo
+                            </button>
+        </div>
+                        <textarea 
+                            v-model="currentItem.notes" 
+                            placeholder="Observações (opcional)" 
+                            class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 h-20"
+                        ></textarea>
+                        </div>
+                    <div class="flex gap-2 mt-4">
+                        <button 
+                            @click="closeItemModal" 
+                            class="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            @click="saveItem" 
+                            class="flex-1 px-4 py-3 bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
+                        >
+                            Salvar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    setup() {
+        const inventory = inject('inventory');
+        const saveInventory = inject('saveInventory');
+        const sheetData = inject('sheetData');
+        const handleImageError = inject('handleImageError');
+        const showCreateItemModal = inject('showCreateItemModal');
+        const editingItemIndex = inject('editingItemIndex');
+        const currentItem = inject('currentItem');
+        const attrNames = inject('attrNames');
+        const editItem = inject('editItem');
+        const removeItem = inject('removeItem');
+        const addAttribute = inject('addAttribute');
+        const removeAttribute = inject('removeAttribute');
+        const updateAttributeName = inject('updateAttributeName');
+        const closeItemModal = inject('closeItemModal');
+        const saveItem = inject('saveItem');
+        
+        return {
+            inventory,
+            sheetData,
+            saveInventory,
+            handleImageError,
+            showCreateItemModal,
+            editingItemIndex,
+            currentItem,
+            attrNames,
+            editItem,
+            removeItem,
+            addAttribute,
+            removeAttribute,
+            updateAttributeName,
+            closeItemModal,
+            saveItem
+        };
+    }
+};
+
+const GmTools = {
+    template: `
+        <div class="space-y-4">
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                <h3 class="font-bold text-sm mb-3 text-red-400">
+                    <i class="fas fa-crown mr-2"></i>Criar Conteúdo
+                </h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button @click="openContentModal('monster')" class="bg-red-900 hover:bg-red-800 p-3 rounded-lg text-white text-sm transition-colors">
+                        <i class="fas fa-dragon mb-1 block"></i>Monstro
+                    </button>
+                    <button @click="openContentModal('item')" class="bg-yellow-900 hover:bg-yellow-800 p-3 rounded-lg text-white text-sm transition-colors">
+                        <i class="fas fa-gem mb-1 block"></i>Item
+                    </button>
+                    <button @click="openContentModal('condition')" class="bg-orange-900 hover:bg-orange-800 p-3 rounded-lg text-white text-sm transition-colors">
+                        <i class="fas fa-exclamation-triangle mb-1 block"></i>Condição
+                    </button>
+                    <button @click="openContentModal('scenario')" class="bg-green-900 hover:bg-green-800 p-3 rounded-lg text-white text-sm transition-colors">
+                        <i class="fas fa-map mb-1 block"></i>Cenário
+                    </button>
+                </div>
+            </div>
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700">
+                <h3 class="font-bold text-sm mb-2 text-gray-300">Jogadores</h3>
+                <button @click="togglePlayersList" class="w-full bg-gray-700 hover:bg-gray-600 p-2 rounded-lg text-white text-sm transition-colors">
+                    <i class="fas fa-users mr-2"></i>Ver Jogadores ({{ playersList.length }})
+                </button>
+                </div>
+            </div>
+    `,
+    setup() {
+        return {
+            openContentModal: inject('openContentModal'),
+            togglePlayersList: inject('togglePlayersList'),
+            playersList: inject('playersList')
+        };
+    }
+};
+
+const MonsterForm = {
+    template: `
+        <div class="space-y-4">
+            <input v-model="monsterData.name" placeholder="Nome do Monstro" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+            <textarea v-model="monsterData.desc" placeholder="Descrição" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 h-24"></textarea>
+            <div class="grid grid-cols-3 gap-2">
+                <input v-model="monsterData.hp" placeholder="HP" type="number" class="p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+                <input v-model="monsterData.ac" placeholder="AC" type="number" class="p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+                <input v-model="monsterData.level" placeholder="Nível" type="number" class="p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+            </div>
+            <input v-model="monsterData.image" placeholder="URL da Imagem" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+        </div>
+    `,
+    setup() {
+        return { monsterData: inject('monsterData') };
+    }
+};
+
+const ItemForm = {
+    template: `
+        <div class="space-y-4">
+            <input v-model="itemData.name" placeholder="Nome do Item" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+            <textarea v-model="itemData.desc" placeholder="Descrição" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 h-32"></textarea>
+            <input v-model="itemData.image" placeholder="URL da Imagem" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+    </div>
+    `,
+    setup() {
+        return { itemData: inject('itemData') };
+    }
+};
+
+const ConditionForm = {
+    template: `
+        <div class="space-y-4">
+            <input v-model="conditionData.name" placeholder="Nome da Condição" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+            <textarea v-model="conditionData.desc" placeholder="Descrição" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 h-32"></textarea>
+            </div>
+    `,
+    setup() {
+        return { conditionData: inject('conditionData') };
+    }
+};
+
+const ScenarioForm = {
+    template: `
+        <div class="space-y-4">
+            <input v-model="scenarioData.name" placeholder="Nome do Cenário" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+            <textarea v-model="scenarioData.desc" placeholder="Descrição" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 h-32"></textarea>
+            <input v-model="scenarioData.image" placeholder="URL da Imagem" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400">
+</div>
+    `,
+    setup() {
+        return { scenarioData: inject('scenarioData') };
+    }
+};
+
+    createApp({
+        setup() {
+        // Estado Principal
+            const joined = ref(false);
+            const isGm = ref(false);
+        const login = ref({ tableId: '', name: '', gmCode: '', playerId: '' });
+            const newTableInfo = ref(null);
+        const tableName = ref('');
+            const isRestoringSession = ref(false);
+        
+        // Mobile State
+        const isMobile = ref(window.innerWidth < 768);
+        const mobileTab = ref('feed');
+        const mobileMenuOpen = ref(false);
+        const feedTab = ref('all'); // 'all' or 'gm'
+        const desktopSidebarTab = ref('sheet'); // 'sheet' or 'inventory'
+        
+        // Modals
+        const showImageModal = ref(false);
+        const showContentModal = ref(false);
+        const showSettings = ref(false);
+        const showPlayersList = ref(false);
+        
+        // Dados
+            const sections = ref([
+                { id: 'fields', title: 'Campos da Ficha', fields: [] },
+            { id: 'info', title: 'Informações do Personagem', fields: [] },
+            { id: 'flex', title: 'Pontos Flexíveis', fields: [] }
+            ]);
+            const sheetData = ref({});
+            const feed = ref([]);
+        const playersList = ref([]);
+        
+        // Inventário
+        const inventory = ref([]);
+        const showCreateItemModal = ref(false);
+        const editingItemIndex = ref(null);
+        const currentItem = ref({ name: '', desc: '', image: '', attributes: {}, notes: '' });
+        const attrNames = ref({});
+        
+        // Visualização do Mestre
+        const viewedPlayer = ref(null);
+        const viewedPlayerData = ref(null);
+        const loadingPlayerData = ref(false);
+            
+            // Inputs
+            const messageInput = ref('');
+            const imageInputUrl = ref('');
+            const imageInputCaption = ref('');
+
+        // Content Creation
+        const contentType = ref('monster');
+        const monsterData = ref({ name: '', desc: '', hp: '', ac: '', level: '', image: '' });
+        const itemData = ref({ name: '', desc: '', image: '' });
+        const conditionData = ref({ name: '', desc: '' });
+        const scenarioData = ref({ name: '', desc: '', image: '' });
+        
+        // Recent Tables
+            const newTableName = ref('');
+            const recentTables = ref([]);
+
+        // Computed
+        const filteredFeed = computed(() => {
+            if (feedTab.value === 'gm') {
+                return feed.value.filter(item => item.is_gm);
+            }
+            return feed.value.filter(item => !item.is_gm);
+        });
+        
+        const contentModalTitle = computed(() => {
+            const titles = {
+                monster: 'Criar Monstro',
+                item: 'Criar Item',
+                condition: 'Criar Condição',
+                scenario: 'Criar Cenário'
+            };
+            return titles[contentType.value] || 'Criar Conteúdo';
+        });
+        
+        const contentModalIcon = computed(() => {
+            const icons = {
+                monster: 'fas fa-dragon',
+                item: 'fas fa-gem',
+                condition: 'fas fa-exclamation-triangle',
+                scenario: 'fas fa-map'
+            };
+            return icons[contentType.value] || 'fas fa-plus';
+        });
+        
+        const contentModalComponent = computed(() => {
+            return contentType.value + '-form';
+        });
+        
+        // Methods
+            const loadRecentTables = () => {
+                try {
+                    const s = localStorage.getItem('recentTables');
+                    if (s) recentTables.value = JSON.parse(s);
+            } catch (e) {
+                recentTables.value = [];
+            }
+            };
+
+            const saveSession = (data) => {
+                try {
+                    localStorage.setItem(SESSION_KEY, JSON.stringify({
+                        tableId: login.value.tableId,
+                        name: login.value.name,
+                        gmCode: login.value.gmCode,
+                        playerId: data.playerId,
+                        isGm: data.isGm
+                    }));
+                } catch (e) {
+                    console.warn('Não foi possível salvar sessão:', e);
+                }
+            };
+
+            const clearSession = () => {
+                localStorage.removeItem(SESSION_KEY);
+            };
+
+            const loadSession = () => {
+                try {
+                    const raw = localStorage.getItem(SESSION_KEY);
+                    if (!raw) return null;
+                    return JSON.parse(raw);
+                } catch (e) {
+                    return null;
+            }
+            };
+
+            const saveRecentTable = (t) => {
+                const list = recentTables.value.filter(x => x.tableId !== t.tableId);
+                list.unshift(t);
+            recentTables.value = list.slice(0, 6);
+                localStorage.setItem('recentTables', JSON.stringify(recentTables.value));
+            };
+
+            const applySuggestion = (t) => {
+                login.value.tableId = t.tableId;
+            };
+
+            const createTable = async () => {
+            try {
+                console.log('Criando mesa...', newTableName.value);
+                const res = await fetch('/api/create-table', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newTableName.value })
+                });
+
+                const data = await res.json().catch(() => null);
+                if (!res.ok) {
+                    console.error('Erro ao criar mesa:', data);
+                    alert('Erro ao criar mesa: ' + (data && data.error ? data.error : res.status));
+                    return;
+                }
+
+                newTableInfo.value = data;
+                newTableName.value = '';
+                console.log('Mesa criada:', data);
+            } catch (e) {
+                console.error('Falha ao criar mesa:', e);
+                alert('Erro ao criar mesa: ' + (e && e.message ? e.message : 'unknown'));
+            }
+            };
+
+            const joinTable = async (auto = false) => {
+            if (!login.value.tableId) {
+                    if (!auto) alert('Digite o ID da mesa');
+                return;
+            }
+            if (!login.value.name && !login.value.gmCode) {
+                    if (!auto) alert('Digite seu nome ou código GM');
+                return;
+            }
+            
+            try {
+                    console.log('Starting join process with:', login.value);
+                const res = await fetch('/api/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(login.value)
+                });
+                    
+                    console.log('Join response status:', res.status);
+                
+                if (res.ok) {
+                    const data = await res.json();
+                        console.log('Join response data:', data);
+                        
+                        // IMPORTANTE: Definir ANTES de carregar dados
+                    isGm.value = data.isGm;
+                    tableName.value = data.tableName || '';
+                        login.value.playerId = data.playerId;
+                        saveSession(data);
+                        
+                        console.log('Set isGm to:', isGm.value, 'tableName:', tableName.value);
+                    
+                    // Normalize schema
+                    const raw = data.schema || [];
+                        console.log('Raw schema:', raw);
+                        
+                    if (Array.isArray(raw) && raw.length && raw[0] && raw[0].name && raw[0].type) {
+                        sections.value[0].fields = raw;
+                        sections.value[1].fields = [];
+                        sections.value[2].fields = [];
+                    } else if (Array.isArray(raw) && raw.length && raw[0] && raw[0].fields) {
+                        sections.value = raw.map(s => ({
+                            id: s.id || Math.random().toString(36).slice(2, 6),
+                            title: s.title || 'Seção',
+                            fields: s.fields || []
+                        }));
+                            while (sections.value.length < 3) {
+                                sections.value.push({
+                                    id: 'sec' + sections.value.length,
+                                    title: 'Seção Extra',
+                                    fields: []
+                                });
+                        }
+                    } else {
+                        sections.value = [
+                            { id: 'fields', title: 'Campos da Ficha', fields: [] },
+                            { id: 'info', title: 'Informações do Personagem', fields: [] },
+                            { id: 'flex', title: 'Pontos Flexíveis', fields: [] }
+                        ];
+                    }
+                    
+                        console.log('Schema normalized, sections:', sections.value);
+                        
+                        saveRecentTable({ 
+                            tableId: login.value.tableId, 
+                            name: data.tableName || login.value.tableId 
+                        });
+                        
+                        // IMPORTANTE: Marcar como joined ANTES de carregar dados
+                        joined.value = true;
+                        console.log('joined.value is now:', joined.value);
+                        
+                        // Aguardar um tick para garantir que a UI foi montada
+                        await nextTick();
+                    
+                    socket.emit('join_table', {
+                        tableId: login.value.tableId,
+                        playerId: login.value.playerId,
+                        name: login.value.name
+                    });
+                        console.log('Emitted join_table socket event');
+                        
+                        // Carregar dados em paralelo
+                        try {
+                            console.log('Loading table data and inventory...');
+                            const promises = [loadTableData()];
+                    if (!isGm.value) {
+                                promises.push(loadInventory());
+                            }
+                            await Promise.all(promises);
+                            console.log('Data loading completed');
+                        } catch (e) {
+                            console.error('Erro ao carregar dados:', e);
+                            lastClientError.value = e.message || 'Data loading failed';
+                        }
+                } else {
+                    const error = await res.json();
+                        const errorMsg = error.error || 'Erro ao entrar na mesa';
+                        console.error('Join failed:', errorMsg);
+                        lastClientError.value = errorMsg;
+                        if (!auto) alert(errorMsg);
+                        if (auto) clearSession();
+                }
+            } catch (e) {
+                console.error('Erro ao conectar:', e);
+                    lastClientError.value = e.message || 'Erro desconhecido';
+                    if (!auto) alert('Erro ao conectar: ' + (e.message || 'Erro desconhecido'));
+                    if (auto) clearSession();
+                }
+            };
+
+        const loadTableData = async () => {
+            try {
+                const url = `/api/table/${login.value.tableId}/data?playerId=${login.value.playerId}`;
+                console.log('Fetching table data from:', url);
+                const res = await fetch(url);
+                console.log('Table data response status:', res.status);
+                
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error('Table data fetch failed:', res.status, errorText);
+                    lastClientError.value = `loadTableData: ${res.status} ${errorText.substring(0, 50)}`;
+                    throw new Error(`HTTP ${res.status}: ${errorText}`);
+                }
+                
+                const data = await res.json();
+                console.log('Table data loaded:', data);
+                
+                if (data.schema) {
+                    const raw = data.schema;
+                    if (Array.isArray(raw) && raw.length && raw[0] && raw[0].name && raw[0].type) {
+                        sections.value[0].fields = raw;
+                    } else if (Array.isArray(raw) && raw.length && raw[0] && raw[0].fields) {
+                        sections.value = raw;
+                    }
+                }
+                if (data.sheetData) sheetData.value = data.sheetData;
+                if (data.feed) feed.value = data.feed;
+                if (data.tableName) tableName.value = data.tableName;
+                
+                scrollToBottom();
+            } catch (e) {
+                console.error('Erro ao carregar dados:', e);
+                lastClientError.value = e.message || 'loadTableData error';
+            }
+        };
+
+        const scrollToBottom = () => {
+            nextTick(() => {
+                const el = document.getElementById('feed-container');
+                if (!el) return;
+                // Com input sticky dentro do main, basta rolar até o final
+                el.scrollTop = el.scrollHeight;
+            });
+        };
+
+        const formatTime = (timestamp) => {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        };
+        
+        const handleImageError = (e) => {
+            e.target.style.display = 'none';
+        };
+
+        const copyItemToInventory = async (content) => {
+            try {
+                // Create an editable item in the same shape as player-created items
+                const newItem = {
+                    name: content.name || 'Item',
+                    desc: content.desc || '',
+                    image: content.image || null,
+                    attributes: {},
+                    notes: ''
+                };
+
+                // Add to transient inventory (editable list)
+                if (!inventory.value) inventory.value = [];
+                inventory.value.push(newItem);
+                await saveInventory();
+
+                alert('Item copiado para seu inventário (agora editável)');
+            } catch (e) {
+                console.error('Erro ao copiar item:', e);
+                alert('Erro ao copiar item para inventário');
+            }
+        };
+
+            const sendMessage = () => {
+                if (!messageInput.value.trim()) return;
+            if (feedTab.value === 'gm' && !isGm.value) {
+                alert('Apenas o mestre pode enviar mensagens no Quadro do Mestre');
+                return;
+            }
+            
+                const payload = {
+                    tableId: login.value.tableId,
+                    type: 'chat',
+                    sender: isGm.value ? 'GM' : login.value.name,
+                    isGm: isGm.value,
+                    content: { text: messageInput.value }
+                };
+                socket.emit('send_message', payload);
+                messageInput.value = '';
+            };
+
+            const sendImage = () => {
+                if (!imageInputUrl.value) return;
+            
+                const payload = {
+                    tableId: login.value.tableId,
+                    type: 'image',
+                    sender: isGm.value ? 'GM' : login.value.name,
+                    isGm: isGm.value,
+                    content: { url: imageInputUrl.value, caption: imageInputCaption.value }
+                };
+                socket.emit('send_message', payload);
+                showImageModal.value = false;
+                imageInputUrl.value = '';
+            imageInputCaption.value = '';
+        };
+        
+        const toggleImageModal = () => {
+            showImageModal.value = !showImageModal.value;
+        };
+        
+        const openContentModal = (type) => {
+            contentType.value = type;
+            showContentModal.value = true;
+        };
+        
+        const sendContent = () => {
+            let content = {};
+            let type = contentType.value;
+            
+            if (type === 'monster') {
+                content = { ...monsterData.value };
+                monsterData.value = { name: '', desc: '', hp: '', ac: '', level: '', image: '' };
+            } else if (type === 'item') {
+                content = { ...itemData.value };
+                itemData.value = { name: '', desc: '', image: '' };
+            } else if (type === 'condition') {
+                content = { ...conditionData.value };
+                conditionData.value = { name: '', desc: '' };
+            } else if (type === 'scenario') {
+                content = { ...scenarioData.value };
+                scenarioData.value = { name: '', desc: '', image: '' };
+            }
+            
+                const payload = {
+                    tableId: login.value.tableId,
+                type: type,
+                    sender: 'GM',
+                    isGm: true,
+                content: content
+                };
+                socket.emit('send_message', payload);
+            showContentModal.value = false;
+            };
+
+            const addField = (sectionId) => {
+            const sec = sections.value.find(s => s.id === sectionId);
+            if (sec) sec.fields.push({ name: 'Novo Campo', type: 'text' });
+            };
+        
+            const removeField = (sectionId, idx) => {
+            const sec = sections.value.find(s => s.id === sectionId);
+            if (sec) sec.fields.splice(idx, 1);
+            };
+            
+            const saveSchema = async () => {
+            try {
+                await fetch('/api/save-schema', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tableId: login.value.tableId,
+                        schema: sections.value
+                    })
+                });
+                alert('Estrutura salva!');
+            } catch (e) {
+                alert('Erro ao salvar');
+            }
+        };
+        
+        const handleAvatarFile = (ev) => {
+            const file = ev.target.files && ev.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const dataUrl = e.target.result;
+                sheetData.value['Avatar'] = dataUrl;
+                await saveSheet();
+            };
+            reader.readAsDataURL(file);
+        };
+        
+        const saveSheet = async () => {
+            if (isGm.value) return;
+            try {
+                await fetch('/api/save-sheet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        playerId: login.value.playerId,
+                        data: sheetData.value
+                    })
+                });
+            } catch (e) {
+                console.error('Erro ao salvar ficha');
+            }
+        };
+        
+        const leaveTable = () => {
+            if (confirm('Deseja realmente sair da mesa?')) {
+                joined.value = false;
+                login.value = { tableId: '', name: '', gmCode: '', playerId: '' };
+                feed.value = [];
+                sheetData.value = {};
+                inventory.value = [];
+                clearSession();
+            }
+        };
+        
+        // Inventário Functions
+        const loadInventory = async () => {
+            if (isGm.value || !login.value.playerId) {
+                console.log('Skipping loadInventory: isGm=', isGm.value, 'playerId=', login.value.playerId);
+                return;
+            }
+            try {
+                const url = `/api/inventory/${login.value.playerId}`;
+                console.log('Fetching inventory from:', url);
+                const res = await fetch(url);
+                console.log('Inventory response status:', res.status);
+                
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error('Inventory fetch failed:', res.status, errorText);
+                    lastClientError.value = `loadInventory: ${res.status}`;
+                    throw new Error(`HTTP ${res.status}: ${errorText}`);
+                }
+                
+                const data = await res.json();
+                console.log('Inventory loaded:', data);
+                inventory.value = data.items || [];
+            } catch (e) {
+                console.error('Erro ao carregar inventário:', e);
+                lastClientError.value = e.message || 'loadInventory error';
+                inventory.value = [];
+            }
+        };
+        
+        const saveInventory = async () => {
+            if (isGm.value || !login.value.playerId) return;
+            try {
+                await fetch(`/api/inventory/${login.value.playerId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: inventory.value })
+                });
+            } catch (e) {
+                console.error('Erro ao salvar inventário:', e);
+            }
+        };
+        
+        const addItemToInventory = (item) => {
+            const newItem = {
+                name: item.name || '',
+                desc: item.desc || '',
+                image: item.image || '',
+                attributes: {},
+                notes: ''
+            };
+            inventory.value.push(newItem);
+            saveInventory();
+        };
+        
+        const editItem = (idx) => {
+            editingItemIndex.value = idx;
+            currentItem.value = JSON.parse(JSON.stringify(inventory.value[idx]));
+            attrNames.value = {};
+            Object.keys(currentItem.value.attributes || {}).forEach(key => {
+                attrNames.value[key] = key;
+            });
+            showCreateItemModal.value = false;
+        };
+        
+        const removeItem = (idx) => {
+            if (confirm('Deseja remover este item do inventário?')) {
+                inventory.value.splice(idx, 1);
+                saveInventory();
+            }
+        };
+        
+        const addAttribute = () => {
+            const key = 'attr_' + Date.now();
+            currentItem.value.attributes[key] = '';
+            attrNames.value[key] = '';
+        };
+        
+        const removeAttribute = (key) => {
+            delete currentItem.value.attributes[key];
+            delete attrNames.value[key];
+        };
+        
+        const updateAttributeName = (oldKey, newName) => {
+            if (oldKey === newName) return;
+            const value = currentItem.value.attributes[oldKey];
+            delete currentItem.value.attributes[oldKey];
+            delete attrNames.value[oldKey];
+            const newKey = newName || 'attr_' + Date.now();
+            currentItem.value.attributes[newKey] = value;
+            attrNames.value[newKey] = newName;
+        };
+        
+        const closeItemModal = () => {
+            showCreateItemModal.value = false;
+            editingItemIndex.value = null;
+            currentItem.value = { name: '', desc: '', image: '', attributes: {}, notes: '' };
+            attrNames.value = {};
+        };
+        
+        const saveItem = () => {
+            // Reconstruir attributes com nomes corretos
+            const finalAttributes = {};
+            Object.keys(currentItem.value.attributes).forEach(key => {
+                const attrName = attrNames.value[key] || key;
+                finalAttributes[attrName] = currentItem.value.attributes[key];
+            });
+            currentItem.value.attributes = finalAttributes;
+            
+            if (editingItemIndex.value !== null) {
+                inventory.value[editingItemIndex.value] = { ...currentItem.value };
+            } else {
+                inventory.value.push({ ...currentItem.value });
+            }
+            saveInventory();
+            closeItemModal();
+        };
+        
+        // Visualização do Mestre
+        const viewPlayer = async (playerId) => {
+            viewedPlayer.value = playerId;
+            loadingPlayerData.value = true;
+            viewedPlayerData.value = null;
+            try {
+                const res = await fetch(`/api/player/${playerId}/view`);
+                const data = await res.json();
+                viewedPlayerData.value = data;
+            } catch (e) {
+                console.error('Erro ao carregar dados do jogador:', e);
+                alert('Erro ao carregar dados do jogador');
+            } finally {
+                loadingPlayerData.value = false;
+            }
+        };
+        
+        // Socket Listeners
+        socket.on('new_feed_item', (item) => {
+            feed.value.push(item);
+            scrollToBottom();
+        });
+
+            socket.on('schema_updated', (newSchema) => {
+                if (!isGm.value) {
+                    if (Array.isArray(newSchema) && newSchema.length && newSchema[0] && newSchema[0].fields) {
+                        sections.value = newSchema;
+                    } else if (Array.isArray(newSchema) && newSchema.length && newSchema[0] && newSchema[0].name) {
+                        sections.value[0].fields = newSchema;
+                    }
+                }
+            });
+
+            socket.on('players_updated', (players) => {
+                playersList.value = players;
+            });
+
+        // Window resize handler
+        const handleResize = () => {
+            isMobile.value = window.innerWidth < 768;
+        };
+        
+        // Provide para componentes filhos
+        const togglePlayersList = () => {
+            showPlayersList.value = true;
+        };
+        
+        // Provide para componentes filhos (deve ser chamado antes do return)
+        provide('sections', sections);
+        provide('sheetData', sheetData);
+        provide('addField', addField);
+        provide('removeField', removeField);
+        provide('saveSchema', saveSchema);
+        provide('handleAvatarFile', handleAvatarFile);
+        provide('saveSheet', saveSheet);
+        provide('openContentModal', openContentModal);
+        provide('showPlayersList', showPlayersList);
+        provide('playersList', playersList);
+        provide('monsterData', monsterData);
+        provide('itemData', itemData);
+        provide('conditionData', conditionData);
+        provide('scenarioData', scenarioData);
+        provide('togglePlayersList', togglePlayersList);
+        provide('inventory', inventory);
+        provide('saveInventory', saveInventory);
+        provide('showCreateItemModal', showCreateItemModal);
+        provide('editingItemIndex', editingItemIndex);
+        provide('currentItem', currentItem);
+        provide('attrNames', attrNames);
+        provide('editItem', editItem);
+        provide('removeItem', removeItem);
+        provide('addAttribute', addAttribute);
+        provide('removeAttribute', removeAttribute);
+        provide('updateAttributeName', updateAttributeName);
+        provide('closeItemModal', closeItemModal);
+        provide('saveItem', saveItem);
+        provide('handleImageError', handleImageError);
+        
+        // Debug state
+        const debugVisible = ref(false);
+        const lastClientError = ref('');
+        window.addEventListener('error', (ev) => {
+            try { console.error('Unhandled error:', ev.error || ev.message); } catch(e){}
+            lastClientError.value = (ev.error && ev.error.message) ? ev.error.message : (ev.message || 'unknown');
+        });
+        window.addEventListener('unhandledrejection', (ev) => {
+            try { console.error('Unhandled rejection:', ev.reason); } catch(e){}
+            lastClientError.value = ev.reason ? (ev.reason.message || JSON.stringify(ev.reason)) : 'unhandledrejection';
+        });
+        
+        // Watcher para debug
+        watch(joined, (newVal) => {
+            console.log('joined changed to:', newVal);
+            if (newVal) {
+                console.log('isGm:', isGm.value);
+                console.log('tableName:', tableName.value);
+                console.log('sections:', sections.value);
+            }
+        });
+        
+        // Lifecycle
+        onMounted(async () => {
+            loadRecentTables();
+            window.addEventListener('resize', handleResize);
+
+            // Restaurar sessão anterior (permite voltar após F5)
+            const stored = loadSession();
+            if (stored && stored.tableId) {
+                try {
+                    isRestoringSession.value = true;
+                    login.value.tableId = stored.tableId;
+                    login.value.name = stored.name || '';
+                    login.value.gmCode = stored.gmCode || '';
+                    await joinTable(true);
+                } finally {
+                    isRestoringSession.value = false;
+                }
+            }
+        });
+
+            return {
+            joined, isGm, login, newTableInfo, tableName, createTable, joinTable,
+            debugVisible, lastClientError,
+            sections, sheetData, feed, messageInput, sendMessage,
+            addField, removeField, saveSchema, saveSheet, handleAvatarFile,
+            copyItemToInventory,
+                showImageModal, toggleImageModal, imageInputUrl, imageInputCaption, sendImage,
+            playersList, showPlayersList,
+            newTableName, recentTables, applySuggestion,
+            isMobile, mobileTab, mobileMenuOpen, feedTab, filteredFeed, desktopSidebarTab,
+            showContentModal, contentType, openContentModal, sendContent,
+            contentModalTitle, contentModalIcon, contentModalComponent,
+            monsterData, itemData, conditionData, scenarioData,
+            showSettings, leaveTable, formatTime, handleImageError, togglePlayersList,
+            inventory, addItemToInventory, viewPlayer, viewedPlayer, viewedPlayerData, loadingPlayerData
+        };
+    },
+    components: {
+        'gm-config': GmConfig,
+        'player-sheet': PlayerSheet,
+        'player-inventory': PlayerInventory,
+        'gm-tools': GmTools,
+        'monster-form': MonsterForm,
+        'item-form': ItemForm,
+        'condition-form': ConditionForm,
+        'scenario-form': ScenarioForm
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>

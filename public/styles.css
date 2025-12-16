@@ -1,0 +1,128 @@
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    overscroll-behavior: none;
+    overflow: hidden; /* evita scroll duplo geral; áreas internas controlam o scroll */
+}
+
+/* Ajustes de scroll para áreas específicas */
+.page-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.scroll-smooth {
+    scroll-behavior: smooth;
+}
+
+.feed-item {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+.tab-active {
+    border-bottom: 2px solid #a855f7;
+}
+
+.card-hover {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-hover:active {
+    transform: scale(0.98);
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    input, textarea, select {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+    }
+}
+
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #1f2937;
+    border-top: 1px solid #374151;
+    z-index: 50;
+}
+
+main { min-height: 0; }
+
+/* Nova área de chat: layout em coluna com cabeçalho, feed e input sticky dentro do main */
+.chat-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.chat-header {
+    background: #1f2937;
+    border-bottom: 1px solid #374151;
+}
+
+.chat-feed {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 1rem;
+    background-image: linear-gradient(to bottom, #111827, #020617);
+}
+
+.chat-input {
+    position: sticky;
+    bottom: 0;
+    background: rgba(17, 24, 39, 0.98);
+    border-top: 1px solid #374151;
+    padding: 1rem;
+    backdrop-filter: blur(6px);
+}
+
+/* Constrain displayed images so they fit the chat/cards without being cropped */
+/* Avatars use .avatar-small to opt out of these rules */
+#app img:not(.avatar-small) {
+    max-width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media (max-width: 768px) {
+    #app img:not(.avatar-small) { max-height: 40vh; }
+}
+
+
