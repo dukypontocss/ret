@@ -10,6 +10,14 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='%233b82f6'/><circle cx='22' cy='22' r='3.6' fill='white'/><circle cx='42' cy='22' r='3.6' fill='white'/><circle cx='22' cy='42' r='3.6' fill='white'/><circle cx='42' cy='42' r='3.6' fill='white'/><circle cx='32' cy='32' r='3.6' fill='white'/></svg>">
     <link rel="stylesheet" href="/styles.css">
+    <style>
+        @media (max-width: 768px) {
+            /* Reserve space for the bottom nav so mobile tabs don't cover content */
+            .mobile-safe-area { padding-bottom: 96px !important; }
+                /* Make sure chat input is visible above the bottom nav on mobile */
+                .chat-input { margin-bottom: 96px; position: relative; z-index: 40; }
+        }
+    </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans antialiased">
 <div id="app" class="h-screen flex flex-col">
@@ -368,15 +376,15 @@
                 </section>
 
                 <!-- Mobile Views (outras abas) -->
-                <div v-show="isMobile && mobileTab === 'sheet'" class="flex-1 overflow-y-auto p-4">
+                <div v-show="isMobile && mobileTab === 'sheet'" class="flex-1 overflow-y-auto p-4 mobile-safe-area">
                     <component :is="isGm ? 'gm-config' : 'player-sheet'"></component>
                 </div>
 
-                <div v-show="isMobile && mobileTab === 'inventory' && !isGm" class="flex-1 overflow-y-auto p-4">
+                <div v-show="isMobile && mobileTab === 'inventory' && !isGm" class="flex-1 overflow-y-auto p-4 mobile-safe-area">
                     <component is="player-inventory"></component>
                 </div>
 
-                <div v-show="isMobile && mobileTab === 'tools' && isGm" class="flex-1 overflow-y-auto p-4">
+                <div v-show="isMobile && mobileTab === 'tools' && isGm" class="flex-1 overflow-y-auto p-4 mobile-safe-area">
                     <component is="gm-tools"></component>
                 </div>
             </main>
@@ -507,11 +515,17 @@
                         <img :src="viewedPlayerData.player.data.Avatar" class="w-24 h-24 rounded-lg object-cover avatar-small" @error="handleImageError">
                     </div>
                     <div class="space-y-3">
-                        <div v-for="(value, key) in viewedPlayerData.player.data" :key="key" v-if="key !== 'Avatar'">
+                        <div v-for="(value, key) in viewedPlayerData.player.data" :key="key" v-if="String(key).toLowerCase().indexOf('avatar') === -1">
                             <div class="text-sm font-semibold text-gray-400 mb-1">{{ key }}</div>
-                            <div class="text-white">{{ value }}</div>
+                            <div>
+                                <div v-if="!isLargeDataValue(value)" class="text-white break-words">{{ value }}</div>
+                                <div v-else class="flex items-center gap-2">
+                                    <span class="text-sm text-gray-400">Valor oculto (imagem grande)</span>
+                                    <button @click="openValueInNewTab(value)" class="text-xs px-2 py-1 bg-gray-700 rounded hover:bg-gray-600">Abrir</button>
+                                </div>
+                            </div>
                         </div>
-                        <div v-if="Object.keys(viewedPlayerData.player.data).filter(k => k !== 'Avatar').length === 0" class="text-gray-500 italic">
+                        <div v-if="Object.keys(viewedPlayerData.player.data).filter(k => String(k).toLowerCase().indexOf('avatar') === -1 && !isLargeDataValue(viewedPlayerData.player.data[k])).length === 0" class="text-gray-500 italic">
                             Nenhum dado preenchido na ficha
                         </div>
                     </div>
@@ -640,53 +654,116 @@ const GmConfig = {
 
 const PlayerSheet = {
     template: `
-        <div class="space-y-4">
-                <div class="mb-4">
-                    <h3 class="font-bold text-sm text-gray-400 mb-2">Avatar</h3>
-                    <div class="flex items-center gap-3">
-                    <div class="w-20 h-20 bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
-                            <img v-if="sheetData['Avatar']" :src="sheetData['Avatar']" class="w-full h-full object-cover avatar-small">
-                            <i v-else class="fas fa-user text-3xl text-gray-500"></i>
-                        </div>
-                        <div class="flex-1">
-                        <input type="file" accept="image/*" @change="handleAvatarFile" class="text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700">
-                        <p class="text-xs text-gray-500 mt-1">Envie uma imagem</p>
-                        </div>
-                    </div>
+        <div class="space-y-4 flex flex-col items-center">
+            <div class="mb-4 w-full flex flex-col items-center">
+                <div class="rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 shadow-lg bg-gradient-to-br from-purple-700 to-purple-900 w-36 h-36 sm:w-48 sm:h-48 md:w-60 md:h-60">
+                    <img v-if="sheetData['Avatar']" :src="sheetData['Avatar']" class="w-full h-full object-cover avatar-small">
+                    <i v-else class="fas fa-user text-4xl text-purple-200"></i>
                 </div>
-                <div v-for="sec in sections" :key="sec.id" class="mb-4">
-                    <h4 class="text-sm font-semibold text-gray-300 mb-2">{{ sec.title }}</h4>
-                <div v-if="sec.fields.length === 0" class="text-xs text-gray-500 italic mb-2">Sem campos</div>
-                <div v-for="(field, idx) in sec.fields" :key="sec.id+'-'+idx" class="mb-3">
-                        <label class="block text-sm text-gray-400 mb-1">{{ field.name }}</label>
-                    <input 
-                        v-if="field.type !== 'longtext'" 
-                        :type="field.type" 
-                        v-model="sheetData[field.name]" 
-                        @change="saveSheet" 
-                        class="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                    <textarea 
-                        v-else 
-                        v-model="sheetData[field.name]" 
-                        @change="saveSheet" 
-                        class="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 text-white h-24 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    ></textarea>
-                    </div>
+                <div class="w-full mt-4 flex flex-col gap-3 px-4">
+                    <button @click="showCampo = true" class="w-full py-3 rounded-lg bg-gradient-to-r from-pink-600 to-pink-500 hover:from-pink-700 hover:to-pink-600 text-white font-semibold shadow flex items-center justify-center"> 
+                        <i class="fas fa-scroll mr-2"></i>Campos
+                    </button>
+                    <button @click="showInfo = true" class="w-full py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold shadow flex items-center justify-center"> 
+                        <i class="fas fa-info-circle mr-2"></i>Informações
+                    </button>
+                    <button @click="showPontos = true" class="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-700 hover:to-yellow-600 text-white font-semibold shadow flex items-center justify-center"> 
+                        <i class="fas fa-star mr-2"></i>Pontos
+                    </button>
                 </div>
-            <div v-if="sections.reduce((acc,s)=>acc + s.fields.length, 0) === 0" class="text-gray-500 italic text-center py-8">
+                <div class="w-full px-4 mt-3">
+                    <input type="file" accept="image/*" @change="handleAvatarFile" class="w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700">
+                </div>
+                <p class="text-xs text-gray-400 mt-2 text-center px-4">Toque em uma das seções para editar no modal — ideal para mobile.</p>
+            </div>
+
+            <!-- Small previews for desktop -->
+            <div class="hidden sm:grid grid-cols-3 gap-3 w-full px-4">
+                <div class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-inner">
+                    <div class="text-xs text-gray-400 mb-2">Campos</div>
+                    <div class="text-sm text-white">{{ sections[0]?.fields?.length || 0 }} campos</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-inner">
+                    <div class="text-xs text-gray-400 mb-2">Informações</div>
+                    <div class="text-sm text-white">{{ sections[1]?.fields?.length || 0 }} campos</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-3 border border-gray-700 shadow-inner">
+                    <div class="text-xs text-gray-400 mb-2">Pontos</div>
+                    <div class="text-sm text-white">{{ sections[2]?.fields?.length || 0 }} campos</div>
+                </div>
+            </div>
+
+            <!-- Empty state -->
+            <div v-if="sections.reduce((acc,s)=>acc + (s.fields?.length||0), 0) === 0" class="text-gray-500 italic text-center py-6 w-full px-4">
                 <i class="fas fa-info-circle text-2xl mb-2"></i>
-                <p>O mestre ainda não definiu a ficha</p>
+                <p>O mestre ainda não definiu a ficha — aguarde ou peça ao mestre para configurar.</p>
+            </div>
+
+            <!-- Modal: Campos -->
+            <div v-if="showCampo" class="fixed inset-0 bg-black bg-opacity-70 flex items-end md:items-center justify-center z-50 p-4" @click.self="showCampo = false">
+                <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-t-2xl md:rounded-xl p-4 w-full max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-lg text-pink-400"><i class="fas fa-scroll mr-2"></i>Campos</h3>
+                        <button @click="showCampo = false" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div v-if="sections[0]">
+                        <div v-if="sections[0].fields.length === 0" class="text-xs text-gray-500 italic mb-2">Sem campos</div>
+                        <div v-for="(field, idx) in sections[0].fields" :key="'camp-'+idx" class="mb-3">
+                            <label class="block text-sm text-gray-400 mb-1">{{ field.name }}</label>
+                            <input v-if="field.type !== 'longtext'" :type="field.type" v-model="sheetData[field.name]" @change="saveSheet" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-pink-500">
+                            <textarea v-else v-model="sheetData[field.name]" @change="saveSheet" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 text-white h-28 focus:outline-none focus:ring-2 focus:ring-pink-500"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: Informações -->
+            <div v-if="showInfo" class="fixed inset-0 bg-black bg-opacity-70 flex items-end md:items-center justify-center z-50 p-4" @click.self="showInfo = false">
+                <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-t-2xl md:rounded-xl p-4 w-full max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-lg text-blue-300"><i class="fas fa-info-circle mr-2"></i>Informações</h3>
+                        <button @click="showInfo = false" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div v-if="sections[1]">
+                        <div v-if="sections[1].fields.length === 0" class="text-xs text-gray-500 italic mb-2">Sem campos</div>
+                        <div v-for="(field, idx) in sections[1].fields" :key="'info-'+idx" class="mb-3">
+                            <label class="block text-sm text-gray-400 mb-1">{{ field.name }}</label>
+                            <input v-if="field.type !== 'longtext'" :type="field.type" v-model="sheetData[field.name]" @change="saveSheet" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <textarea v-else v-model="sheetData[field.name]" @change="saveSheet" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 text-white h-28 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal: Pontos -->
+            <div v-if="showPontos" class="fixed inset-0 bg-black bg-opacity-70 flex items-end md:items-center justify-center z-50 p-4" @click.self="showPontos = false">
+                <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-t-2xl md:rounded-xl p-4 w-full max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-lg text-yellow-300"><i class="fas fa-star mr-2"></i>Pontos</h3>
+                        <button @click="showPontos = false" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div v-if="sections[2]">
+                        <div v-if="sections[2].fields.length === 0" class="text-xs text-gray-500 italic mb-2">Sem campos</div>
+                        <div v-for="(field, idx) in sections[2].fields" :key="'pts-'+idx" class="mb-3">
+                            <label class="block text-sm text-gray-400 mb-1">{{ field.name }}</label>
+                            <input v-if="field.type !== 'longtext'" :type="field.type" v-model="sheetData[field.name]" @change="saveSheet" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                            <textarea v-else v-model="sheetData[field.name]" @change="saveSheet" class="w-full p-3 bg-gray-700 rounded-lg border border-gray-600 text-white h-28 focus:outline-none focus:ring-2 focus:ring-yellow-500"></textarea>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     `,
     setup() {
-        return {
-            sections: inject('sections'),
-            sheetData: inject('sheetData'),
-            handleAvatarFile: inject('handleAvatarFile'),
-            saveSheet: inject('saveSheet')
-        };
+        const sections = inject('sections');
+        const sheetData = inject('sheetData');
+        const handleAvatarFile = inject('handleAvatarFile');
+        const saveSheet = inject('saveSheet');
+        const showCampo = ref(false);
+        const showInfo = ref(false);
+        const showPontos = ref(false);
+
+        return { sections, sheetData, handleAvatarFile, saveSheet, showCampo, showInfo, showPontos };
     }
 };
 
@@ -1663,6 +1740,32 @@ const ScenarioForm = {
                 console.log('sections:', sections.value);
             }
         });
+
+        // Helpers to avoid showing giant data URLs in GM view
+        const isLargeDataValue = (val) => {
+            try {
+                if (!val) return false;
+                if (typeof val !== 'string') return false;
+                const s = val.trim();
+                if (s.startsWith('data:')) return true;
+                if (s.length > 240) return true;
+                return false;
+            } catch (e) { return false; }
+        };
+
+        const openValueInNewTab = (val) => {
+            try {
+                const w = window.open();
+                if (!w) return alert('Não foi possível abrir nova aba');
+                // If it's a data URL or long URL, write a minimal HTML to show it
+                if (typeof val === 'string' && val.trim().startsWith('data:')) {
+                    w.document.write(`<img src="${val}" style="max-width:100%;height:auto;display:block;margin:16px auto;">`);
+                } else {
+                    w.document.write(`<pre style="white-space:pre-wrap;word-wrap:break-word;padding:16px;background:#0f172a;color:#e6eef8;">${String(val)}</pre>`);
+                }
+                w.document.title = 'Valor do Jogador';
+            } catch (e) { console.error(e); alert('Erro ao abrir valor'); }
+        };
         
         // Lifecycle
         onMounted(async () => {
@@ -1699,6 +1802,7 @@ const ScenarioForm = {
             monsterData, itemData, conditionData, scenarioData,
             showSettings, leaveTable, formatTime, handleImageError, togglePlayersList,
             inventory, addItemToInventory, viewPlayer, viewedPlayer, viewedPlayerData, loadingPlayerData
+            , isLargeDataValue, openValueInNewTab
         };
     },
     components: {
